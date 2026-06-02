@@ -309,3 +309,13 @@ async def obter_receitas(dados: RequisicaoReceitas):
         return [rec for rec in receitas_filtradas if "Quebra de jejum" in rec["titulo"] or rec["calorias"] <150]
     
     return receitas_filtradas
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    
+    # O Render fornece a porta na variável de ambiente PORT. Se não encontrar, usa a 8000.
+    porta = int(os.environ.get("PORT", 8000))
+    
+    # Rodamos o uvicorn apontando para o IP 0.0.0.0 para aceitar conexões externas
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=porta, reload=False)
