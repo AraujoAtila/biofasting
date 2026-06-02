@@ -134,7 +134,9 @@ export default function App() {
   useEffect(() => {
     const inicializarAplicacao = async () => {
       try {
-        const resHistorico = await fetch("http://127.0.0.1:8000/api/historico");
+        const resHistorico = await fetch(
+          "https://biofasting.onrender.com/api/historico",
+        );
         const dadosHistorico = await resHistorico.json();
         setHistorico(dadosHistorico);
 
@@ -161,7 +163,7 @@ export default function App() {
 
           // Puxa as receitas ideais para o estado recuperado do Excel
           const resReceitas = await fetch(
-            "http://127.0.0.1:8000/api/receitas",
+            "https://biofasting.onrender.com/api/receitas",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -227,11 +229,14 @@ export default function App() {
   const buscarCondutaSOS = async (sintoma) => {
     setSintomaSelecionado(sintoma);
     try {
-      const resposta = await fetch("http://127.0.0.1:8000/api/sos-conduta", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sintoma: sintoma }),
-      });
+      const resposta = await fetch(
+        "https://biofasting.onrender.com/api/sos-conduta",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sintoma: sintoma }),
+        },
+      );
       const dados = await resposta.json();
       setCondutaRecebida(dados);
     } catch (error) {
@@ -254,14 +259,17 @@ export default function App() {
     const faseAtualInfo = obterFaseCelularDinamica();
 
     try {
-      const resposta = await fetch("http://127.0.0.1:8000/api/concluir-jejum", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          horas_decorridas: horasRealizadas,
-          fase_atingida: faseAtualInfo.nome,
-        }),
-      });
+      const resposta = await fetch(
+        "https://biofasting.onrender.com/api/concluir-jejum",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            horas_decorridas: horasRealizadas,
+            fase_atingida: faseAtualInfo.nome,
+          }),
+        },
+      );
 
       const resultado = await resposta.json();
 
@@ -277,14 +285,16 @@ export default function App() {
         setSegundosDecorridos(0);
         setPlano({ ...plano, fase_atual: "JANELA_ABERTA" });
 
-        const resHistorico = await fetch("http://127.0.0.1:8000/api/historico");
+        const resHistorico = await fetch(
+          "https://biofasting.onrender.com/api/historico",
+        );
         if (resHistorico.ok) {
           const dadosHistorico = await resHistorico.json();
           setHistorico(dadosHistorico);
 
           // CORREÇÃO 3: Ajustado o IP de 172.0.0.1 para 127.0.0.1 e normalizada string da fase
           const resReceitas = await fetch(
-            "http://127.0.0.1:8000/api/receitas",
+            "https://biofasting.onrender.com/api/receitas",
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -318,11 +328,14 @@ export default function App() {
     };
 
     try {
-      const resposta = await fetch("http://127.0.0.1:8000/api/gerar-plano", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pacoteDados),
-      });
+      const resposta = await fetch(
+        "https://biofasting.onrender.com/api/gerar-plano",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pacoteDados),
+        },
+      );
 
       if (!resposta.ok) {
         throw new Error(
@@ -335,20 +348,25 @@ export default function App() {
       setModalConfigAberto(false);
 
       // Atualiza o feed de receitas baseado na nova fase e protocolo ativos
-      const resReceitas = await fetch("http://127.0.0.1:8000/api/receitas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fase_janela: dadosObtidos.fase_atual,
-          protocolo_ativo: dadosObtidos.protocolo,
-          treino_concluido: false,
-        }),
-      });
+      const resReceitas = await fetch(
+        "https://biofasting.onrender.com/api/receitas",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fase_janela: dadosObtidos.fase_atual,
+            protocolo_ativo: dadosObtidos.protocolo,
+            treino_concluido: false,
+          }),
+        },
+      );
       if (resReceitas.ok) {
         setReceitas(await resReceitas.json());
       }
 
-      const resHistorico = await fetch("http://127.0.0.1:8000/api/historico");
+      const resHistorico = await fetch(
+        "https://biofasting.onrender.com/api/historico",
+      );
       if (resHistorico.ok) {
         setHistorico(await resHistorico.json());
       }
