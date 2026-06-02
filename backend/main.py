@@ -11,7 +11,7 @@ app = FastAPI(title="BioFasting API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173,"
-                    "https://biofasting.vercel.app/"
+                    "https://biofasting.vercel.app"
                    ],
     allow_credentials=True,
     allow_methods=["*"],
