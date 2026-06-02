@@ -19,8 +19,13 @@ app.add_middleware(
 )
 
 # Caminho planilha
-PASTA_ATUAL = Path(__file__).parent.resolve()
-ARQUIVO_EXCEL = str(PASTA_ATUAL / "historico_jejum.xlsx")
+#PASTA_ATUAL = Path(__file__).parent.resolve()
+#ARQUIVO_EXCEL = str(PASTA_ATUAL / "historico_jejum.xlsx")
+
+# Descobre dinamicamente a pasta onde o main.py está rodando (backend/)
+BASE_DIR = Path(__file__).resolve().parent
+# Define o caminho do Excel garantindo que ele seja criado exatamente na mesma pasta do código
+ARQUIVO_EXCEL = BASE_DIR / "historico_jejum.xlsx"
 
 class PerfilUsuario(BaseModel):
     idade: int
