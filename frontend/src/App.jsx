@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "https://biofasting.onrender.com";
+
 export default function App() {
   const [plano, setPlano] = useState(null);
   const [receitas, setReceitas] = useState([]);
@@ -134,9 +137,7 @@ export default function App() {
   useEffect(() => {
     const inicializarAplicacao = async () => {
       try {
-        const resHistorico = await fetch(
-          "https://biofasting.onrender.com/api/historico",
-        );
+        const resHistorico = await fetch(`${API_BASE_URL}/api/historico`);
         const dadosHistorico = await resHistorico.json();
         setHistorico(dadosHistorico);
 
@@ -149,31 +150,34 @@ export default function App() {
           setModalConfigAberto(true);
         } else {
           const ultimoRegistro = dadosHistorico[0];
-          const protocoloSalvo = ultimoRegistro.Protocolo || "16:8";
+          const protocoloSalvo =
+            ultimoRegistro.protocolo || ultimoRegistro.Protocolo || "16:8";
 
           // CORREÇÃO 2: Criada a variável faseSegura para substituir o erro de 'faseSalva' indefinida
           const faseSegura =
-            ultimoRegistro.Ultima_Fase_Celular || "JANELA_ABERTA";
+            ultimoRegistro.ultima_fase_celular ||
+            ultimoRegistro.Ultima_Fase_Celular ||
+            "JANELA_ABERTA";
 
           setPlano({
             protocolo: protocoloSalvo,
-            quebra_jejum_sugerida: ultimoRegistro.Janela_Quebra || "12:00",
+            quebra_jejum_sugerida:
+              ultimoRegistro.janela_quebra ||
+              ultimoRegistro.Janela_Quebra ||
+              "12:00",
             fase_atual: faseSegura,
           });
 
           // Puxa as receitas ideais para o estado recuperado do Excel
-          const resReceitas = await fetch(
-            "https://biofasting.onrender.com/api/receitas",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fase_janela: faseSegura,
-                protocolo_ativo: protocoloSalvo,
-                treino_concluido: false,
-              }),
-            },
-          );
+          const resReceitas = await fetch(`${API_BASE_URL}/api/receitas`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fase_janela: faseSegura,
+              protocolo_ativo: protocoloSalvo,
+              treino_concluido: false,
+            }),
+          });
           if (resReceitas.ok) {
             const dadosReceitas = await resReceitas.json();
             setReceitas(dadosReceitas);
@@ -229,14 +233,11 @@ export default function App() {
   const buscarCondutaSOS = async (sintoma) => {
     setSintomaSelecionado(sintoma);
     try {
-      const resposta = await fetch(
-        "https://biofasting.onrender.com/api/sos-conduta",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sintoma: sintoma }),
-        },
-      );
+      const resposta = await fetch(`${API_BASE_URL}/api/sos-conduta`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sintoma: sintoma }),
+      });
       const dados = await resposta.json();
       setCondutaRecebida(dados);
     } catch (error) {
@@ -259,17 +260,21 @@ export default function App() {
     const faseAtualInfo = obterFaseCelularDinamica();
 
     try {
-      const resposta = await fetch(
-        "https://biofasting.onrender.com/api/concluir-jejum",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            horas_decorridas: horasRealizadas,
-            fase_atingida: faseAtualInfo.nome,
-          }),
-        },
-      );
+      const resposta = await fetch(`${API_BASE_URL}/api/concluir-jejum`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          horas_decorridas: horasRealizadas,
+          fase_atingida: faseAtualInfo.nome,
+        }),
+      });
+
+      if (!resposta.ok) {
+        const erro = await resposta.json().catch(() => ({}));
+        throw new Error(
+          erro.detail || `O servidor respondeu com status: ${resposta.status}`,
+        );
+      }
 
       const resultado = await resposta.json();
 
@@ -285,26 +290,21 @@ export default function App() {
         setSegundosDecorridos(0);
         setPlano({ ...plano, fase_atual: "JANELA_ABERTA" });
 
-        const resHistorico = await fetch(
-          "https://biofasting.onrender.com/api/historico",
-        );
+        const resHistorico = await fetch(`${API_BASE_URL}/api/historico`);
         if (resHistorico.ok) {
           const dadosHistorico = await resHistorico.json();
           setHistorico(dadosHistorico);
 
           // CORREÇÃO 3: Ajustado o IP de 172.0.0.1 para 127.0.0.1 e normalizada string da fase
-          const resReceitas = await fetch(
-            "https://biofasting.onrender.com/api/receitas",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fase_janela: "JANELA_ABERTA",
-                protocolo_ativo: plano?.protocolo || "16:8",
-                treino_concluido: false,
-              }),
-            },
-          );
+          const resReceitas = await fetch(`${API_BASE_URL}/api/receitas`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fase_janela: "JANELA_ABERTA",
+              protocolo_ativo: plano?.protocolo || "16:8",
+              treino_concluido: false,
+            }),
+          });
           if (resReceitas.ok) {
             setReceitas(await resReceitas.json());
           }
@@ -312,6 +312,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("Erro ao comunicar o fim do jejum:", error);
+      alert(`Falha ao concluir jejum: ${error.message}.`);
     }
   };
 
@@ -328,18 +329,17 @@ export default function App() {
     };
 
     try {
-      const resposta = await fetch(
-        "https://biofasting.onrender.com/api/gerar-plano",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(pacoteDados),
-        },
-      );
+      const resposta = await fetch(`${API_BASE_URL}/api/gerar-plano`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pacoteDados),
+      });
 
       if (!resposta.ok) {
+        const erro = await resposta.json().catch(() => ({}));
         throw new Error(
-          `O servidor Python respondeu com status: ${resposta.status}`,
+          erro.detail ||
+            `O servidor Python respondeu com status: ${resposta.status}`,
         );
       }
 
@@ -348,25 +348,20 @@ export default function App() {
       setModalConfigAberto(false);
 
       // Atualiza o feed de receitas baseado na nova fase e protocolo ativos
-      const resReceitas = await fetch(
-        "https://biofasting.onrender.com/api/receitas",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fase_janela: dadosObtidos.fase_atual,
-            protocolo_ativo: dadosObtidos.protocolo,
-            treino_concluido: false,
-          }),
-        },
-      );
+      const resReceitas = await fetch(`${API_BASE_URL}/api/receitas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fase_janela: dadosObtidos.fase_atual,
+          protocolo_ativo: dadosObtidos.protocolo,
+          treino_concluido: false,
+        }),
+      });
       if (resReceitas.ok) {
         setReceitas(await resReceitas.json());
       }
 
-      const resHistorico = await fetch(
-        "https://biofasting.onrender.com/api/historico",
-      );
+      const resHistorico = await fetch(`${API_BASE_URL}/api/historico`);
       if (resHistorico.ok) {
         setHistorico(await resHistorico.json());
       }
@@ -631,27 +626,28 @@ export default function App() {
                   className="bg-gray-950/60 border border-gray-900 rounded-xl p-3 text-xs flex flex-col gap-1 hover:border-gray-800 transition-all"
                 >
                   <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                    <span>{item.Data_Registro}</span>
+                    <span>{item.data_registro || item.Data_Registro}</span>
                     <span
-                      className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${item.Evento === "FIM_JEJUM" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}
+                      className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${(item.evento || item.Evento) === "FIM_JEJUM" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}
                     >
-                      {item.Evento ? item.Evento : "NOVO_PLANO"}
+                      {item.evento || item.Evento || "NOVO_PLANO"}
                     </span>
                   </div>
 
                   <div className="text-gray-300 mt-1 flex justify-between">
-                    {item.Evento === "FIM_JEJUM" ? (
+                    {(item.evento || item.Evento) === "FIM_JEJUM" ? (
                       <>
                         <span>
                           Duraçao:{" "}
                           <strong className="text-white font-mono">
-                            {item.Horas_Decorridas}h
+                            {item.horas_decorridas || item.Horas_Decorridas}h
                           </strong>
                         </span>
                         <span className="text-gray-500">
                           Fase:{" "}
                           <span className="text-orange-400">
-                            {item.Ultima_Fase_Celular}
+                            {item.ultima_fase_celular ||
+                              item.Ultima_Fase_Celular}
                           </span>
                         </span>
                       </>
@@ -660,12 +656,14 @@ export default function App() {
                         <span>
                           Protocolo:{" "}
                           <strong className="text-white">
-                            {item.Protocolo}
+                            {item.protocolo || item.Protocolo}
                           </strong>
                         </span>
                         <span>
                           Idade:{" "}
-                          <strong className="text-white">{item.Idade}a</strong>
+                          <strong className="text-white">
+                            {item.idade || item.Idade}a
+                          </strong>
                         </span>
                       </>
                     )}

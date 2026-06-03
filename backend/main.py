@@ -1,14 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from pathlib import Path
 from supabase import create_client, Client
 import os
 
 # CONFIGURAÇÃO DO SUPABASE
-SUPABASE_URL = "https://rfniwomlyduynidhhgno.supabase.co" # Removido o '/rest/v1' do final para a biblioteca funcionar corretamente
-SUPABASE_KEY = "sb_publishable_b547kf9GfOr3qfJyux_1hQ_-VnzjnfS"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://rfniwomlyduynidhhgno.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_b547kf9GfOr3qfJyux_1hQ_-VnzjnfS")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -76,7 +75,7 @@ async def obter_historico():
         return resposta.data
     except Exception as e:
         print(f"Erro ao ler dados do Supabase: {e}")
-        return []
+        raise HTTPException(status_code=500, detail=f"Erro ao ler dados do Supabase: {e}")
 
 # Gerar plano e iniciar sessão salvando no Supabase
 @app.post("/api/gerar-plano")
@@ -141,6 +140,7 @@ async def gerar_plano(dados: PerfilUsuario):
         supabase.table("historico_jejum").insert(registro_inicio).execute()
     except Exception as e:
         print(f"Erro ao salvar no Supabase: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar no Supabase: {e}")
 
     return {
         "protocolo": protocolo_final,
@@ -176,7 +176,7 @@ async def concluir_jejum(dados: ConclusaoJejum):
         return {"status": "sucesso", "mensagem": "Encerramento registrado no Supabase"}
     except Exception as e:
         print(f"Erro ao salvar conclusão no Supabase: {e}")
-        return {"status": "erro", "mensagem": str(e)}
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar conclusão no Supabase: {e}")
 
 # Rota de consulta do SOS
 @app.post("/api/sos-conduta")
