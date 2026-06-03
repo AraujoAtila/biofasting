@@ -230,6 +230,27 @@ export default function App() {
     return `${horas.toString().padStart(2, "0")}:${minutos.toString().padStart(2, "0")}:${segundos.toString().padStart(2, "0")}`;
   };
 
+  const formatarDataRegistro = (valor) => {
+    if (!valor) return "--/--/---- --:--";
+
+    const data = new Date(valor);
+
+    if (Number.isNaN(data.getTime())) {
+      return valor;
+    }
+
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Manaus",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+      .format(data)
+      .replace(",", " -");
+  };
+
   const buscarCondutaSOS = async (sintoma) => {
     setSintomaSelecionado(sintoma);
     try {
@@ -607,16 +628,16 @@ export default function App() {
           <div className="mb-4">
             <h3 className="text-md font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Registos de Bordo (Excel)
+              Registos de Bordo
             </h3>
             <p className="text-xs text-gray-400 mt-0.5">
-              Histórico de sessões guardado diretamente no disco local.
+              Histórico de sessões guardado.
             </p>
           </div>
 
           {historico.length === 0 ? (
             <p className="text-xs text-gray-500 text-center py-4 italic">
-              Nenhum registo encontrado na planilha.
+              Nenhum registo encontrado.
             </p>
           ) : (
             <div className="space-y-3 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
@@ -626,7 +647,11 @@ export default function App() {
                   className="bg-gray-950/60 border border-gray-900 rounded-xl p-3 text-xs flex flex-col gap-1 hover:border-gray-800 transition-all"
                 >
                   <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-                    <span>{item.data_registro || item.Data_Registro}</span>
+                    <span>
+                      {formatarDataRegistro(
+                        item.data_registro || item.Data_Registro,
+                      )}
+                    </span>
                     <span
                       className={`px-2 py-0.5 rounded font-bold uppercase text-[9px] ${(item.evento || item.Evento) === "FIM_JEJUM" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}
                     >
