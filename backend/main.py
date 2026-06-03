@@ -3,30 +3,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from pathlib import Path
-import pandas as pd
+from supabase import create_client, Client
 import os
+
+# CONFIGURAÇÃO DO SUPABASE
+SUPABASE_URL = "https://rfniwomlyduynidhhgno.supabase.co" # Removido o '/rest/v1' do final para a biblioteca funcionar corretamente
+SUPABASE_KEY = "sb_publishable_b547kf9GfOr3qfJyux_1hQ_-VnzjnfS"
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI(title="BioFasting API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173",
-                    "https://biofasting.vercel.app"
-                   ],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://biofasting.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Caminho planilha
-#PASTA_ATUAL = Path(__file__).parent.resolve()
-#ARQUIVO_EXCEL = str(PASTA_ATUAL / "historico_jejum.xlsx")
-
-# Descobre dinamicamente a pasta onde o main.py está rodando (backend/)
-BASE_DIR = Path(__file__).resolve().parent
-# Define o caminho do Excel garantindo que ele seja criado exatamente na mesma pasta do código
-ARQUIVO_EXCEL = BASE_DIR / "historico_jejum.xlsx"
-
+# --- MODELOS DE DADOS (PYDANTIC) ---
 class PerfilUsuario(BaseModel):
     idade: int
     nivel_experiencia: str
@@ -34,12 +33,10 @@ class PerfilUsuario(BaseModel):
     hora_treino: str = ""
     protocolo_escolhido: str
 
-# recebe os dados do encerramento
 class ConclusaoJejum(BaseModel):
     horas_decorridas: float
     fase_atingida: str
 
-# Modelo de dados para o pedido de socorro
 class PedidoSOS(BaseModel):
     sintoma: str
 
@@ -48,16 +45,16 @@ class RequisicaoReceitas(BaseModel):
     protocolo_ativo: str
     treino_concluido: bool = False
 
-#Base de dados
+# --- BASE DE DADOS SOS ---
 DICIONARIO_SOS = {
-    "DOR_DE_CABECA":{
-        "titulo": "Cefalei por Transição Metabólica",
+    "DOR_DE_CABECA": {
+        "titulo": "Cefaleia por Transição Metabólica",
         "conduta": "Adicione uma pitada de sal integral ou sal rosa num copo de água morna.",
         "gravidade": "LEVE"
     },
-    "FRAQUEZA":{
+    "FRAQUEZA": {
         "titulo": "Hipoglicemia Reativa / Adaptação",
-        "conduta": "Beba 200ml de água com uma colher de chá de vinagre de sidra de maça.",
+        "conduta": "Beba 200ml de água com uma colher de chá de vinagre de sidra de maçã.",
         "gravidade": "MODERADA"
     },
     "NAUSEA": {
@@ -67,68 +64,26 @@ DICIONARIO_SOS = {
     }
 }
 
-#função salvar dados planilha
-def salvar_no_execel(dados_plano: dict, perfil: PerfilUsuario):
-    # 1. prepara a linha com as informações a serem guardadas
-    nova_linha = {
-        "Data_Registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Idade": perfil.idade,
-        "Nivel": perfil.nivel_experiencia,
-        "Treina": perfil.treina,
-        "Hora_Treino": perfil.hora_treino if perfil.hora_treino else "Não treina",
-        "Protocolo": dados_plano["protocolo"],
-        "Janela_Quebra": dados_plano["quebra_jejum_sugerida"]
-    }
+# --- ROTAS DA API ---
 
-    # 2. Se a planilha já exitir, será lida, senão será criada
-    if os.path.exists(ARQUIVO_EXCEL) and os.path.getsize(ARQUIVO_EXCEL) > 0:
-        df = pd.read_excel(ARQUIVO_EXCEL)
-        # Adiciona nova linha ao Dataframe
-        df = pd.concat([df, pd.DataFrame([nova_linha])], ignore_index=True)
-    else:
-        #cria a planilha pela primeira vez com a primeira linha
-        df = pd.DataFrame([nova_linha])
-    
-    # 3. Salva arquivo
-    df.to_excel(ARQUIVO_EXCEL, index=False)
-
-#exibir histórico
+# Exibir histórico buscado diretamente do Supabase
 @app.get("/api/historico")
-async def obter_historio():
-    print(f"Tentado ler a planilha em: {os.path.abspath(ARQUIVO_EXCEL)}")
-    #se não existir, cria uma planilha
-    if not os.path.exists(ARQUIVO_EXCEL) or os.path.getsize(ARQUIVO_EXCEL) == 0:
-        print(f"Arquivo não encontado")
-        return []
+async def obter_historico():
+    print("Buscando histórico no Supabase...")
     try:
-        #ler a planilha
-        df = pd.read_excel(ARQUIVO_EXCEL)
-        print(f"Planilha lida com sucesso. Total de linhas: {len(df)}")
-        # substituí valores nulos por strings vazias
-        df = df.fillna("")
-        #converte linha da planilha num formato de lista de dicionário
-        dados = df.to_dict(orient="records")
-        #devolve lista invertidas para que os registros mais recentes aparecem primeiro
-        return dados[::-1]
+        # Busca todas as linhas da tabela ordenando pelo ID decrescente (mais recentes primeiro)
+        resposta = supabase.table("historico_jejum").select("*").order("id", desc=True).execute()
+        return resposta.data
     except Exception as e:
-        print(f"Erro ao ler a planilha: {e}")
-        return[]
+        print(f"Erro ao ler dados do Supabase: {e}")
+        return []
 
-from datetime import datetime, timedelta
-
-# 1. Atualizamos o modelo para receber a escolha do usuário
-class PerfilUsuario(BaseModel):
-    idade: int
-    nivel_experiencia: str
-    treina: bool
-    hora_treino: str
-    protocolo_escolhido: str # <-- NOVO: "AUTOMATICO", "12:12", "16:8" ou "18:6"
-
+# Gerar plano e iniciar sessão salvando no Supabase
 @app.post("/api/gerar-plano")
 async def gerar_plano(dados: PerfilUsuario):
     print(f"Calibrando perfil. Idade={dados.idade}, Escolha={dados.protocolo_escolhido}")
     
-    # 2. SISTEMA DE RECOMENDAÇÃO INTELIGENTE (Sugestão do Sistema)
+    # Sistema de recomendação inteligente
     if dados.nivel_experiencia == "INICIANTE" and not dados.treina:
         protocolo_sugerido = "12:12"
     elif dados.idade > 30 and dados.treina:
@@ -136,10 +91,8 @@ async def gerar_plano(dados: PerfilUsuario):
     else:
         protocolo_sugerido = "16:8"
 
-    # 3. APLICAÇÃO DA DECISÃO (Escolha do usuário vs Sugestão automática)
     protocolo_final = protocolo_sugerido if dados.protocolo_escolhido == "AUTOMATICO" else dados.protocolo_escolhido
 
-    # 4. MAPEAMENTO DE HORAS BASEADO NO PROTOCOLO FINAL
     if protocolo_final == "12:12":
         horas_jejum = 12
         fase_inicial = "GLICOGÊNIO_BAIXO"
@@ -148,16 +101,15 @@ async def gerar_plano(dados: PerfilUsuario):
         horas_jejum = 18
         fase_inicial = "CETOSE_PROGRESSIVA"
         quebra_sugerida_padrao = "14:00"
-    else: # 16:8
+    else:
         horas_jejum = 16
         fase_inicial = "AUTOFAGIA_INICIAL"
         quebra_sugerida_padrao = "12:00"
 
-    # 5. CÁLCULO DOS HORÁRIOS CRONOBIOLÓGICOS
     try:
         if dados.treina and dados.hora_treino:
             hora_base = datetime.strptime(dados.hora_treino, "%H:%M")
-            inicio_dt = hora_base + timedelta(hours=2) # 2h após o treino
+            inicio_dt = hora_base + timedelta(hours=2)
         else:
             inicio_dt = datetime.strptime("20:00", "%H:%M")
         
@@ -169,30 +121,26 @@ async def gerar_plano(dados: PerfilUsuario):
         hora_inicio_jejum = "20:00"
         hora_abertura_janela = quebra_sugerida_padrao
 
-    # 6. MONTAGEM DA LINHA PARA O EXCEL
+    # Montagem do dicionário mapeado exatamente para as colunas do seu Supabase
     registro_inicio = {
-        "Data_Registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Idade": dados.idade,
-        "Nivel": dados.nivel_experiencia,
-        "Treina": "SIM" if dados.treina else "NÃO",
-        "Hora_Treino": dados.hora_treino,
-        "Protocolo": protocolo_final,
-        "Janela_Quebra": hora_abertura_janela,
-        "Evento": "INICIO_SESSÃO",
-        "Horas_Decorridas": 0,
-        "Ultima_Fase_Celular": fase_inicial,
-        "Status": f"Ativo (Sugerido: {protocolo_sugerido})"
+        "data_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "idade": dados.idade,
+        "nivel": dados.nivel_experiencia,
+        "treina": "SIM" if dados.treina else "NÃO",
+        "hora_treino": dados.hora_treino if dados.hora_treino else "Não treina",
+        "protocolo": protocolo_final,
+        "janela_quebra": hora_abertura_janela,
+        "evento": "INICIO_SESSÃO",
+        "horas_decorridas": 0.0,
+        "ultima_fase_celular": fase_inicial,
+        "status": f"Ativo (Sugerido: {protocolo_sugerido})"
     }
     
     try:
-        if os.path.exists(ARQUIVO_EXCEL) and os.path.getsize(ARQUIVO_EXCEL) > 0:
-            df = pd.read_excel(ARQUIVO_EXCEL)
-            df = pd.concat([df, pd.DataFrame([registro_inicio])], ignore_index=True)
-        else:
-            df = pd.DataFrame([registro_inicio])
-        df.to_excel(ARQUIVO_EXCEL, index=False)
+        # Envia a nova linha diretamente para o banco de dados
+        supabase.table("historico_jejum").insert(registro_inicio).execute()
     except Exception as e:
-        print(f"Erro ao salvar excel: {e}")
+        print(f"Erro ao salvar no Supabase: {e}")
 
     return {
         "protocolo": protocolo_final,
@@ -205,124 +153,63 @@ async def gerar_plano(dados: PerfilUsuario):
         "horas_janela": 24 - horas_jejum
     }
 
-# Rota para React chamar o botão
+# Rota para concluir jejum e salvar no Supabase
 @app.post("/api/concluir-jejum")
 async def concluir_jejum(dados: ConclusaoJejum):
-    # prepara registro para o encerramento
     registro_fim = {
-        "Data_Registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Idade": "",
-        "Nivel": "",
-        "Treina": "",
-        "Hora_Treino": "",
-        "Protocolo": "",
-        "Janela_Quebra": "",
-        "Evento": "FIM_JEJUM",
-        "Horas_Decorridas": dados.horas_decorridas,
-        "Ultima_Fase_Celular": dados.fase_atingida,
-        "Status": "Concluído"
+        "data_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "idade": None,
+        "nivel": "",
+        "treina": "",
+        "hora_treino": "",
+        "protocolo": "",
+        "janela_quebra": "",
+        "evento": "FIM_JEJUM",
+        "horas_decorridas": dados.horas_decorridas,
+        "ultima_fase_celular": dados.fase_atingida,
+        "status": "Concluído"
     }
 
-    # Lê planilha e concatena nova linha
-    if os.path.exists(ARQUIVO_EXCEL) and os.path.getsize(ARQUIVO_EXCEL) > 0:
-        df = pd.read_excel(ARQUIVO_EXCEL)
-        df = pd.concat([df, pd.DataFrame([registro_fim])], ignore_index=True)
-    else:
-        df = pd.DataFrame([registro_fim])
+    try:
+        # Envia o encerramento do jejum para o banco de dados
+        supabase.table("historico_jejum").insert(registro_fim).execute()
+        return {"status": "sucesso", "mensagem": "Encerramento registrado no Supabase"}
+    except Exception as e:
+        print(f"Erro ao salvar conclusão no Supabase: {e}")
+        return {"status": "erro", "mensagem": str(e)}
 
-    df.to_excel(ARQUIVO_EXCEL, index=False)
-
-    return {"status": "sucesso", "mensagem": "Encerramento registrado na panilha"}
-
-#Rota de consulta do SOS
+# Rota de consulta do SOS
 @app.post("/api/sos-conduta")
 async def consultar_sos(pedido: PedidoSOS):
-    #procura no dicionário
     conduta = DICIONARIO_SOS.get(
         pedido.sintoma, {
-            "titulo": "Aviso Geral", "conduta": "Mantenha-se hidratado e consulte um médico se os sintomas persistirem.", "gravidade": "LEVE"
+            "titulo": "Aviso Geral", 
+            "conduta": "Mantenha-se hidratado e consulte um médico se os sintomas persistirem.", 
+            "gravidade": "LEVE"
         }
     )
     return conduta
 
-# endpoint receitas
+# Endpoint receitas
 @app.post("/api/receitas")
 async def obter_receitas(dados: RequisicaoReceitas):
-    print(f"Buscando receitas para Protocolo: {dados.protocolo_ativo} | Estado: {dados.fase_janela}")
-
-    # Banco de dados
     banco_receitas = [
-        {
-            "id": 1,
-            "titulo": "Abacate Premium com Ovos Escalfados",
-            "imagem_url": "🥑",
-            "tags": ["Low Carb", "Proteína"],
-            "calorias": 380,
-            "protocolos": ["18:6", "16:8"]
-        },
-        {
-            "id": 2,
-            "titulo": "Shots de Caldo de Ossos (Quebra de Jejum)",
-            "imagem_url": "🥣",
-            "tags": ["Proteína"],
-            "calorias": 120,
-            "protocolos": ["18:6"]
-        },
-        {
-            "id": 3,
-            "titulo": "Salmão Grelhado com Crosta de Gergelim",
-            "imagem_url": "🐟",
-            "tags": ["Proteína", "Low Carb"],
-            "calorias": 450,
-            "protocolos": ["18:6", "16:8"]
-        },
-        
-        # --- RECEITAS PARA O PROTOCOLO PADRÃO (16:8) ---
-        {
-            "id": 4,
-            "titulo": "Omelete de Espinafre com Queijo Cottage",
-            "imagem_url": "🍳",
-            "tags": ["Low Carb", "Proteína"],
-            "calorias": 290,
-            "protocolos": ["16:8", "12:12"]
-        },
-        
-        # --- RECEITAS PARA O PROTOCOLO INICIANTE (12:12) - Carboidratos Complexos de Baixo IG liberados ---
-        {
-            "id": 5,
-            "titulo": "Mingau de Aveia Integral com Canela e Chia",
-            "imagem_url": "🥣",
-            "tags": ["Fibra"],
-            "calorias": 240,
-            "protocolos": ["12:12"]
-        },
-        {
-            "id": 6,
-            "titulo": "Iogurte Natural com Morangos e Castanhas",
-            "imagem_url": "🍓",
-            "tags": ["Low Carb"],
-            "calorias": 190,
-            "protocolos": ["12:12", "16:8"]
-        }
+        {"id": 1, "titulo": "Abacate Premium com Ovos Escalfados", "imagem_url": "🥑", "tags": ["Low Carb", "Proteína"], "calorias": 380, "protocolos": ["18:6", "16:8"]},
+        {"id": 2, "titulo": "Shots de Caldo de Ossos (Quebra de Jejum)", "imagem_url": "🥣", "tags": ["Proteína"], "calorias": 120, "protocolos": ["18:6"]},
+        {"id": 3, "titulo": "Salmão Grelhado com Crosta de Gergelim", "imagem_url": "🐟", "tags": ["Proteína", "Low Carb"], "calorias": 450, "protocolos": ["18:6", "16:8"]},
+        {"id": 4, "titulo": "Omelete de Espinafre com Queijo Cottage", "imagem_url": "🍳", "tags": ["Low Carb", "Proteína"], "calorias": 290, "protocolos": ["16:8", "12:12"]},
+        {"id": 5, "titulo": "Mingau de Aveia Integral com Canela e Chia", "imagem_url": "🥣", "tags": ["Fibra"], "calorias": 240, "protocolos": ["12:12"]},
+        {"id": 6, "titulo": "Iogurte Natural com Morangos e Castanhas", "imagem_url": "🍓", "tags": ["Low Carb"], "calorias": 190, "protocolos": ["12:12", "16:8"]}
     ]
 
-    # Filtragem inteligente
-    receitas_filtradas = [
-        rec for rec in banco_receitas
-        if dados.protocolo_ativo in rec["protocolos"]
-    ]
+    receitas_filtradas = [rec for rec in banco_receitas if dados.protocolo_ativo in rec["protocolos"]]
 
     if dados.fase_janela == "JEJUM_ATIVO":
-        return [rec for rec in receitas_filtradas if "Quebra de jejum" in rec["titulo"] or rec["calorias"] <150]
+        return [rec for rec in receitas_filtradas if "Quebra de jejum" in rec["titulo"] or rec["calorias"] < 150]
     
     return receitas_filtradas
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
-    # O Render fornece a porta na variável de ambiente PORT. Se não encontrar, usa a 8000.
     porta = int(os.environ.get("PORT", 8000))
-    
-    # Rodamos o uvicorn apontando para o IP 0.0.0.0 para aceitar conexões externas
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=porta, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=porta, reload=False)
